@@ -67,23 +67,6 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 class nnUNetTrainer(object):
     def __init__(self, plans: dict, configuration: str, fold: int, dataset_json: dict, unpack_dataset: bool = True,
                  device: torch.device = torch.device('cuda')):
-        # From https://grugbrain.dev/. Worth a read ya big brains ;-)
-
-        # apex predator of grug is complexity
-        # complexity bad
-        # say again:
-        # complexity very bad
-        # you say now:
-        # complexity very, very bad
-        # given choice between complexity or one on one against t-rex, grug take t-rex: at least grug see t-rex
-        # complexity is spirit demon that enter codebase through well-meaning but ultimately very clubbable non grug-brain developers and project managers who not fear complexity spirit demon or even know about sometime
-        # one day code base understandable and grug can get work done, everything good!
-        # next day impossible: complexity demon spirit has entered code and very dangerous situation!
-
-        # OK OK I am guilty. But I tried.
-        # https://www.osnews.com/images/comics/wtfm.jpg
-        # https://i.pinimg.com/originals/26/b2/50/26b250a738ea4abc7a5af4d42ad93af0.jpg
-
         self.is_ddp = dist.is_available() and dist.is_initialized()
         self.local_rank = 0 if not self.is_ddp else dist.get_rank()
 
@@ -140,8 +123,6 @@ class nnUNetTrainer(object):
 
         ### Some hyperparameters for you to fiddle with
         self.initial_lr = 1e-2
-        from nnunetv2.hyperparameter import lr
-        self.initial_lr = lr
         self.weight_decay = 3e-5
         self.oversample_foreground_percent = 0.33
         self.num_iterations_per_epoch = 250
@@ -190,14 +171,6 @@ class nnUNetTrainer(object):
         self._set_batch_size_and_oversample()
 
         self.was_initialized = False
-
-        self.print_to_log_file("\n#######################################################################\n"
-                               "Please cite the following paper when using nnU-Net:\n"
-                               "Isensee, F., Jaeger, P. F., Kohl, S. A., Petersen, J., & Maier-Hein, K. H. (2021). "
-                               "nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. "
-                               "Nature methods, 18(2), 203-211.\n"
-                               "#######################################################################\n",
-                               also_print_to_console=True, add_timestamp=False)
 
     def initialize(self):
         if not self.was_initialized:
@@ -366,7 +339,7 @@ class nnUNetTrainer(object):
 
         if self.enable_deep_supervision:
             deep_supervision_scales = self._get_deep_supervision_scales()
-            weights = np.array([1 / (2**i) for i in range(len(deep_supervision_scales))])
+            weights = np.array([1 / (2 ** i) for i in range(len(deep_supervision_scales))])
             weights[-1] = 0
 
             # we don't use the lowest 2 outputs. Normalize weights so that they sum to 1
@@ -675,19 +648,19 @@ class nnUNetTrainer(object):
 
     @staticmethod
     def get_training_transforms(
-        patch_size: Union[np.ndarray, Tuple[int]],
-        rotation_for_DA: dict,
-        deep_supervision_scales: Union[List, Tuple, None],
-        mirror_axes: Tuple[int, ...],
-        do_dummy_2d_data_aug: bool,
-        order_resampling_data: int = 3,
-        order_resampling_seg: int = 1,
-        border_val_seg: int = -1,
-        use_mask_for_norm: List[bool] = None,
-        is_cascaded: bool = False,
-        foreground_labels: Union[Tuple[int, ...], List[int]] = None,
-        regions: List[Union[List[int], Tuple[int, ...], int]] = None,
-        ignore_label: int = None,
+            patch_size: Union[np.ndarray, Tuple[int]],
+            rotation_for_DA: dict,
+            deep_supervision_scales: Union[List, Tuple, None],
+            mirror_axes: Tuple[int, ...],
+            do_dummy_2d_data_aug: bool,
+            order_resampling_data: int = 3,
+            order_resampling_seg: int = 1,
+            border_val_seg: int = -1,
+            use_mask_for_norm: List[bool] = None,
+            is_cascaded: bool = False,
+            foreground_labels: Union[Tuple[int, ...], List[int]] = None,
+            regions: List[Union[List[int], Tuple[int, ...], int]] = None,
+            ignore_label: int = None,
     ) -> AbstractTransform:
         tr_transforms = []
         if do_dummy_2d_data_aug:
@@ -769,11 +742,11 @@ class nnUNetTrainer(object):
 
     @staticmethod
     def get_validation_transforms(
-        deep_supervision_scales: Union[List, Tuple, None],
-        is_cascaded: bool = False,
-        foreground_labels: Union[Tuple[int, ...], List[int]] = None,
-        regions: List[Union[List[int], Tuple[int, ...], int]] = None,
-        ignore_label: int = None,
+            deep_supervision_scales: Union[List, Tuple, None],
+            is_cascaded: bool = False,
+            foreground_labels: Union[Tuple[int, ...], List[int]] = None,
+            regions: List[Union[List[int], Tuple[int, ...], int]] = None,
+            ignore_label: int = None,
     ) -> AbstractTransform:
         val_transforms = []
         val_transforms.append(RemoveLabelTransform(-1, 0))
@@ -1084,54 +1057,6 @@ class nnUNetTrainer(object):
                 self.print_to_log_file('No checkpoint written, checkpointing is disabled')
 
     def load_checkpoint(self, filename_or_checkpoint: Union[dict, str]) -> None:
-        from nnunetv2.hyperparameter import only_load_param
-        # filename_or_checkpoint = '/root/nnUNet/nnUNet_results/Dataset129_Vessel_Patch_Super_Voxel/nnUNetTrainer__nnUNetPlans__3d_fullres/fold_3/checkpoint_best.pth'
-        if only_load_param:
-            print('use frozen encoder param')
-            from nnunetv2.hyperparameter import load_ckpt_path
-            filename_or_checkpoint = load_ckpt_path
-            if not self.was_initialized:
-                self.initialize()
-            if isinstance(filename_or_checkpoint, str):
-                checkpoint = torch.load(filename_or_checkpoint, map_location=self.device)
-            # if state dict comes from nn.DataParallel but we use non-parallel model here then the state dict keys do not
-            # match. Use heuristic to make it match
-            new_state_dict = {}
-            for k, value in checkpoint['network_weights'].items():
-                key = k
-                if key.startswith('encoder.'):
-                    new_state_dict[key.replace('encoder.','')] = value
-                if key.startswith('decoder.'):
-                    continue
-                if key not in self.network.state_dict().keys() and key.startswith('module.'):
-                    key = key[7:]
-                # new_state_dict[key] = value
-                    
-            # self.my_init_kwargs = checkpoint['init_args']
-            # self.current_epoch = checkpoint['current_epoch']
-            # self.logger.load_checkpoint(checkpoint['logging'])
-            # self._best_ema = checkpoint['_best_ema']
-            # self.inference_allowed_mirroring_axes = checkpoint[
-            #     'inference_allowed_mirroring_axes'] if 'inference_allowed_mirroring_axes' in checkpoint.keys() else self.inference_allowed_mirroring_axes
-
-            # messing with state dict naming schemes. Facepalm.
-            if self.is_ddp:
-                if isinstance(self.network.module, OptimizedModule):
-                    self.network.module._orig_mod.load_state_dict(new_state_dict)
-                else:
-                    self.network.module.load_state_dict(new_state_dict)
-            else:
-                if isinstance(self.network, OptimizedModule):
-                    self.network._orig_mod.load_state_dict(new_state_dict)
-                else:
-                    self.network.encoder.load_state_dict(new_state_dict)
-                    # self.network.load_state_dict(new_state_dict)
-            # self.optimizer.load_state_dict(checkpoint['optimizer_state'])
-            # if self.grad_scaler is not None:
-            #     if checkpoint['grad_scaler_state'] is not None:
-            #         self.grad_scaler.load_state_dict(checkpoint['grad_scaler_state'])
-            return
-
         if not self.was_initialized:
             self.initialize()
 
@@ -1146,12 +1071,12 @@ class nnUNetTrainer(object):
                 key = key[7:]
             new_state_dict[key] = value
 
-        # self.my_init_kwargs = checkpoint['init_args']
-        # self.current_epoch = checkpoint['current_epoch']
-        # self.logger.load_checkpoint(checkpoint['logging'])
-        # self._best_ema = checkpoint['_best_ema']
-        # self.inference_allowed_mirroring_axes = checkpoint[
-        #     'inference_allowed_mirroring_axes'] if 'inference_allowed_mirroring_axes' in checkpoint.keys() else self.inference_allowed_mirroring_axes
+        self.my_init_kwargs = checkpoint['init_args']
+        self.current_epoch = checkpoint['current_epoch']
+        self.logger.load_checkpoint(checkpoint['logging'])
+        self._best_ema = checkpoint['_best_ema']
+        self.inference_allowed_mirroring_axes = checkpoint[
+            'inference_allowed_mirroring_axes'] if 'inference_allowed_mirroring_axes' in checkpoint.keys() else self.inference_allowed_mirroring_axes
 
         # messing with state dict naming schemes. Facepalm.
         if self.is_ddp:
@@ -1164,10 +1089,10 @@ class nnUNetTrainer(object):
                 self.network._orig_mod.load_state_dict(new_state_dict)
             else:
                 self.network.load_state_dict(new_state_dict)
-        # self.optimizer.load_state_dict(checkpoint['optimizer_state'])
-        # if self.grad_scaler is not None:
-        #     if checkpoint['grad_scaler_state'] is not None:
-        #         self.grad_scaler.load_state_dict(checkpoint['grad_scaler_state'])
+        self.optimizer.load_state_dict(checkpoint['optimizer_state'])
+        if self.grad_scaler is not None:
+            if checkpoint['grad_scaler_state'] is not None:
+                self.grad_scaler.load_state_dict(checkpoint['grad_scaler_state'])
 
     def perform_actual_validation(self, save_probabilities: bool = False):
         self.set_deep_supervision_enabled(False)
@@ -1204,11 +1129,11 @@ class nnUNetTrainer(object):
 
             for k in dataset_val.keys():
                 proceed = not check_workers_alive_and_busy(segmentation_export_pool, worker_list, results,
-                                                 allowed_num_queued=2)
+                                                           allowed_num_queued=2)
                 while not proceed:
                     sleep(0.1)
                     proceed = not check_workers_alive_and_busy(segmentation_export_pool, worker_list, results,
-                                                     allowed_num_queued=2)
+                                                               allowed_num_queued=2)
 
                 self.print_to_log_file(f"predicting {k}")
                 data, seg, properties = dataset_val.load_case(k)

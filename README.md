@@ -25,7 +25,7 @@ We follow the same structure as in [nnU-Net](https://github.com/MIC-DKFZ/nnUNet)
 	|-- labelsTr/
 	|-- labelsTs/
 	|-- dataset.json
-./Dataset120_Supervoxel
+./Dataset120_Vessel
 	|-- imagesTr/
 	|-- imagesTs/
 	|-- labelsTr/
@@ -54,55 +54,41 @@ As for the information of dataset in `dataset.json`, the contents are as follows
 
 ```
 
-We use this for the second training stage for our decoder. While training the first stage, just remove the last channel in key `channel_names`. More details and rules of the filename and environment variable configuration can be seen at [nnU-Net](https://github.com/MIC-DKFZ/nnUNet).
+We use this for the directory of `Dataset120_Vessel`. Just keep the first channel in key `channel_names` in the directory of `Dataset119_Vessel`. More details and rules of the filename and environment variable configuration can be seen at [nnU-Net](https://github.com/MIC-DKFZ/nnUNet).
 
-### 2. Supervoxel clustering
+Our dataset is currently not publicly available, but may be in the future. Please stay tuned.
 
-Run the following command to generate all the results of supervoxel clustering.
+### 2. Preprocessing
+
+We follow the same dataset preprocessing and training framework as in [nnU-Net](https://github.com/MIC-DKFZ/nnUNet).  The `preprocess.sh` contains all commands that we need. Run it to get the preprocessed data that used in training stage.
+
+```
+bash preprocess.sh
+```
+
+If you only want to get the supervoxel result, you can run the following command to generate the results of supervoxel clustering that we use.
 
 ```
 cd slic
 python slic.py
 ```
 
-The result folder will be generate as follow:
-
-```
-./slic/
-	|-- label_vis1000/
-	|-- label_vis1000_loop1/
-	|-- label_1000/
-	|-- label_1000_loop1/
-	|-- result1000/
-	|-- result1000_loop1/
-	|-- result_mat/
-```
-
-Put the folder `label_vis1000_loop1` to the dataset and set the filename to fit the rules above.
-
 ## Training
 
 ### 1. Encoder Training
 
-We follow the same dataset preprocessing and training framework as in [nnU-Net](https://github.com/MIC-DKFZ/nnUNet). Using the script to get the calcification mask.
+Run the `train.sh` to train our network. If you have set the environment of nnU-Net before, we recommand you to use the following command to run manually. The command will run both stages automatically. If you interrupt the training but want to continue, add the parameter `--c`.
 
 ```
-bash ./mask_generate.sh
-```
-
-Then use the following command provided by nnU-Net's framework to generate the plan in encoder training and train the model.
-
-```
-nnUNetv2_plan_and_preprocess -d 119 -c 3d_fullres
-nnUNetv2_train 119 3d_fullres 4
+python train.py 120 4 -tr SPGUNetTrainer -p SPGUNetPlans -stage 0
 ```
 
 ### 2. Decoder Training
 
-The decoder can be trained after finishing training the encoder. Put the best model `checkpoint_best.pth` in the previous stage at the folder `./pretrain` and run the script to train.
+If you have trained the encoder and only want to train the decoder, use following command to skip the first stage.
 
 ```
-bash ./decoder_train.sh
+python train.py 120 4 -tr SPGUNetTrainer -p SPGUNetPlans -stage 1
 ```
 
 ## Test

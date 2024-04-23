@@ -34,6 +34,23 @@ class Cluster(object):
 
 
 class SLICProcessor(object):
+    def __init__(self, filename, K, M):
+        self.K = K
+        self.M = M
+
+        self.data, self.spacing, self.origin, self.direction = self.open_nii(filename, init=True)
+        self.image_height = self.data.shape[0]
+        self.image_width = self.data.shape[1]
+        self.image_depth = self.data.shape[2]
+        self.N = self.image_height * self.image_width * self.image_depth  # voxel num
+        self.S = int(math.pow(self.N / self.K, 1 / 3))  # voxel initial size
+
+        self.clusters = []
+        self.label = {}  # dict, (h,w,d):cluster
+        self.dis = np.full((self.image_height, self.image_width, self.image_depth), np.inf)
+        self.iter_num = 0
+        self.reload = False
+
     def open_nii(self, path, init=False):
         vol_itk = sitk.ReadImage(path)
         vol = sitk.GetArrayFromImage(vol_itk)
@@ -74,23 +91,6 @@ class SLICProcessor(object):
         w = int(w)
         d = int(d)
         return Cluster(h, w, d, self.data[h][w][d])
-
-    def __init__(self, filename, K, M):
-        self.K = K
-        self.M = M
-
-        self.data, self.spacing, self.origin, self.direction = self.open_nii(filename, init=True)
-        self.image_height = self.data.shape[0]
-        self.image_width = self.data.shape[1]
-        self.image_depth = self.data.shape[2]
-        self.N = self.image_height * self.image_width * self.image_depth  # voxel num
-        self.S = int(math.pow(self.N / self.K, 1 / 3))  # voxel initial size
-
-        self.clusters = []
-        self.label = {}  # dict, (h,w,d):cluster
-        self.dis = np.full((self.image_height, self.image_width, self.image_depth), np.inf)
-        self.iter_num = 0
-        self.reload = False
 
     def init_clusters(self):
         h = self.S / 2
@@ -179,7 +179,7 @@ class SLICProcessor(object):
                 number += 1
             if number == 0:
                 continue
-            # 放到循环外
+
             _h = sum_h / number
             _w = sum_w / number
             _d = sum_d / number
@@ -205,64 +205,39 @@ class SLICProcessor(object):
             image_arr[cluster.h][cluster.w][cluster.d] = 0
         self.save_nii(name, image_arr)
 
-    def save_current_label(self, name_vis, name_label, data):
+    def save_current_label(self, name_vis, data):
         assert len(data.shape) == 3
-        label_arr = np.copy(data)
+        # label_arr = np.copy(data)
         label_arr_vis = np.copy(data)
         vis_class = 0
         for cluster in self.clusters:
-            class_count = [0, 0, 0, 0]  # bg, non cal, cal, lumen
+            # class_count = [0, 0, 0, 0]  # bg, non cal, cal, lumen
 
-            for p in cluster.pixels:
-                class_count[data[p[0], p[1], p[2]]] += 1
+            # for p in cluster.pixels:
+            #     class_count[data[p[0], p[1], p[2]]] += 1
 
-            class_val = class_count.index(max(class_count))
+            # class_val = class_count.index(max(class_count))
             for p in cluster.pixels:
                 label_arr_vis[p[0], p[1], p[2]] = vis_class
-                label_arr[p[0], p[1], p[2]] = class_val
+                # label_arr[p[0], p[1], p[2]] = class_val
             vis_class += 1
 
         self.save_nii(name_vis, label_arr_vis)
-        self.save_nii(name_label, label_arr)
+        # self.save_nii(name_label, label_arr)
 
-    def iterate_10times(self, name_string):
+    def iterate(self, write_path):
         # init
         if not self.reload:
             self.init_clusters()
             self.move_clusters()
 
-        # iterate
         for i in range(self.iter_num, iteration):
 
             self.assignment()
             self.update_cluster()
 
-            name = root_save_path + 'result1000/{name_string}_M{m}_K{k}_loop{loop}.nii.gz'.format(loop=i, name_string=name_string, m=self.M, k=self.K)
-            self.save_current_image(name)
-
             if i == iteration - 1:
-                name = root_save_path + 'result1000_loop{loop}/{name_string}_M{m}_K{k}_loop{loop}.nii.gz'.format(loop=i, name_string=name_string,
-                                                                                                             m=self.M,
-                                                                                                             k=self.K)
-                self.save_current_image(name)
-
-            labelname_vis = root_save_path + 'label_vis1000/{name_string}_M{m}_K{k}_loop{loop}.nii.gz'.format(loop=i, name_string=name_string,
-                                                                                                              m=self.M,
-                                                                                                              k=self.K)
-            labelname = root_save_path + 'label1000/{name_string}_M{m}_K{k}_loop{loop}.nii.gz'.format(loop=i, name_string=name_string, m=self.M,
-                                                                                                      k=self.K)
-
-            labelpath = '{seg_dir}/{name_string}.nii.gz'.format(seg_dir=seg_dir, name_string=name_string)
-            labelresult = self.open_nii(labelpath)
-            self.save_current_label(labelname_vis, labelname, labelresult)
-
-            if i == iteration - 1:
-                labelname_vis = root_save_path + 'label_vis1000_loop10/{name_string}_M{m}_K{k}_loop{loop}.nii.gz'.format(loop=i,
-                                                                                                                         name_string=name_string,
-                                                                                                                         m=self.M, k=self.K)
-                labelname = root_save_path + 'label1000_loop{loop}/{name_string}_M{m}_K{k}_loop{loop}.nii.gz'.format(loop=i, name_string=name_string,
-                                                                                                                 m=self.M, k=self.K)
-                self.save_current_label(labelname_vis, labelname, labelresult)
+                self.save_current_label(write_path,self.data)
 
     def save_mat_new(self, name_string):
         maxlen = len(self.clusters)
@@ -295,32 +270,21 @@ class SLICProcessor(object):
         scio.savemat(mat_name, {'shape': final_result}, appendmat=True, do_compression=True)
 
 
-def slic_process(vol_name):
-    image_name = os.path.join(nii_dir, vol_name)
-    name_string = vol_name.split('.')[0]
+def slic_process(vol_path):
+    # image_name = os.path.join(nii_dir, vol_path)
+    # name_string = vol_path.split('.')[0]
     # print('image_name is：', image_name)
     # print('name_string is ', name_string)
-
-    x = root_save_path + 'label_vis1000_loop{loop}/{name_string}_M{m}_K{k}_loop{loop}.nii.gz'.format(loop=iteration - 1, name_string=name_string,
-                                                                                                m=M, k=K)
-    if os.path.exists(x):
-        print('{} has been created'.format(name_string))
+    supervoxel_path = vol_path.replace('_0000','_0002')
+    if os.path.exists(supervoxel_path):
+        print('{} has been created'.format(supervoxel_path.split('/')[-1]))
         return
-    p = SLICProcessor(image_name, K, M)
-    if reload_flag:
-        mat_path = root_save_path + 'result_mat/{name_string}.mat'.format(name_string=name_string)
-        last_iter_num = -1
-        last_res_paths = root_save_path + 'result1000/{name_string}_M{m}_K{k}_loop*.nii.gz'.format(name_string=name_string, m=M, k=K)
-        last_res_paths = glob.glob(last_res_paths)
-        if len(last_res_paths) > 0:
-            pattern = re.compile(r'.*_loop(\d+)\.nii\.gz')
-            last_iter_num = max(int(pattern.search(file).group(1)) for file in last_res_paths if pattern.search(file))
-        if last_iter_num != -1:
-            p.reload_mat(mat_path, last_iter_num + 1)
-            print('reload from: ', mat_path)
-    p.iterate_10times(name_string)
+    print('creating {}'.format(supervoxel_path.split('/')[-1]))
+    p = SLICProcessor(vol_path, K, M)
+    p.iterate(supervoxel_path)
+    print('{} has been created'.format(supervoxel_path.split('/')[-1]))
 
-    p.save_mat_new(name_string)
+    # p.save_mat_new(name_string)
 
 def pre_mkdir():
     result_mat_path = root_save_path + 'result_mat/'
@@ -376,7 +340,6 @@ def pre_mkdir():
 nii_dir = '/root/autodl-tmp/slic/3d_crop_res/nii'  # ct path
 seg_dir = '/root/autodl-tmp/slic/3d_crop_res/mask'  # mask path
 root_save_path = '/root/autodl-tmp/slic/k8000m1/'  # supervoxel root path
-reload_flag = False
 iteration = 1
 K = 8000
 M = 16

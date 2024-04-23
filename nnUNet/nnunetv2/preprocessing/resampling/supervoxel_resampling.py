@@ -8,18 +8,17 @@ from batchgenerators.augmentations.utils import resize_segmentation
 from scipy.ndimage.interpolation import map_coordinates
 from skimage.transform import resize
 from nnunetv2.configuration import ANISO_THRESHOLD
+from nnunetv2.preprocessing.resampling.default_resampling import get_do_separate_z,get_lowres_axis,compute_new_shape
 
-from default_resampling import get_do_separate_z,get_lowres_axis,compute_new_shape
 
-
-def resample_data_or_seg_to_shape(data: Union[torch.Tensor, np.ndarray],
-                                  new_shape: Union[Tuple[int, ...], List[int], np.ndarray],
-                                  current_spacing: Union[Tuple[float, ...], List[float], np.ndarray],
-                                  new_spacing: Union[Tuple[float, ...], List[float], np.ndarray],
-                                  is_seg: bool = False,
-                                  order: int = 3, order_z: int = 0,
-                                  force_separate_z: Union[bool, None] = False,
-                                  separate_z_anisotropy_threshold: float = ANISO_THRESHOLD):
+def spgu_resample_data_or_seg_to_shape(data: Union[torch.Tensor, np.ndarray],
+                                       new_shape: Union[Tuple[int, ...], List[int], np.ndarray],
+                                       current_spacing: Union[Tuple[float, ...], List[float], np.ndarray],
+                                       new_spacing: Union[Tuple[float, ...], List[float], np.ndarray],
+                                       is_seg: bool = False,
+                                       order: int = 3, order_z: int = 0,
+                                       force_separate_z: Union[bool, None] = False,
+                                       separate_z_anisotropy_threshold: float = ANISO_THRESHOLD):
     """
     needed for segmentation export. Stupid, I know. Maybe we can fix that with Leos new resampling functions
     """
@@ -86,6 +85,11 @@ def resample_data_or_seg(data: np.ndarray, new_shape: Union[Tuple[float, ...], L
     dtype_data = data.dtype
     shape = np.array(data[0].shape)
     new_shape = np.array(new_shape)
+
+    order = [order]
+    for c in range(1,data.shape[0]):
+        order.append(0) # other channel use linear
+
     if np.any(shape != new_shape):
         data = data.astype(float)
         if do_separate_z:
@@ -101,17 +105,14 @@ def resample_data_or_seg(data: np.ndarray, new_shape: Union[Tuple[float, ...], L
 
             reshaped_final_data = []
             for c in range(data.shape[0]):
-                if c > 0:
-                    tmp_order = order
-                    order = 0
                 reshaped_data = []
                 for slice_id in range(shape[axis]):
                     if axis == 0:
-                        reshaped_data.append(resize_fn(data[c, slice_id], new_shape_2d, order, **kwargs))
+                        reshaped_data.append(resize_fn(data[c, slice_id], new_shape_2d, order[c], **kwargs))
                     elif axis == 1:
-                        reshaped_data.append(resize_fn(data[c, :, slice_id], new_shape_2d, order, **kwargs))
+                        reshaped_data.append(resize_fn(data[c, :, slice_id], new_shape_2d, order[c], **kwargs))
                     else:
-                        reshaped_data.append(resize_fn(data[c, :, :, slice_id], new_shape_2d, order, **kwargs))
+                        reshaped_data.append(resize_fn(data[c, :, :, slice_id], new_shape_2d, order[c], **kwargs))
                 reshaped_data = np.stack(reshaped_data, axis)
                 if shape[axis] != new_shape[axis]:
 
@@ -145,23 +146,12 @@ def resample_data_or_seg(data: np.ndarray, new_shape: Union[Tuple[float, ...], L
                 else:
                     reshaped_final_data.append(reshaped_data[None])
 
-                if c > 0:
-                    order = tmp_order
-
             reshaped_final_data = np.vstack(reshaped_final_data)
         else:
             # print("no separate z, order", order)
             reshaped = []
             for c in range(data.shape[0]):
-
-                if c > 0:
-                    tmp_order = order
-                    order = 0
-
-                reshaped.append(resize_fn(data[c], new_shape, order, **kwargs)[None])
-
-                if c > 0:
-                    order = tmp_order
+                reshaped.append(resize_fn(data[c], new_shape, order[c], **kwargs)[None])
             reshaped_final_data = np.vstack(reshaped)
         return reshaped_final_data.astype(dtype_data)
     else:

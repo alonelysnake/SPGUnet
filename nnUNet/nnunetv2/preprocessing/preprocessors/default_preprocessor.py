@@ -81,7 +81,7 @@ class DefaultPreprocessor(object):
         # print('current shape', data.shape[1:], 'current_spacing', original_spacing,
         #       '\ntarget shape', new_shape, 'target_spacing', target_spacing)
         old_shape = data.shape[1:]
-        data = configuration_manager.resampling_fn_data(data, new_shape, original_spacing, target_spacing)# ljh: 此处进行resize
+        data = configuration_manager.resampling_fn_data(data, new_shape, original_spacing, target_spacing)
         seg = configuration_manager.resampling_fn_seg(seg, new_shape, original_spacing, target_spacing)
         if self.verbose:
             print(f'old shape: {old_shape}, new_shape: {new_shape}, old_spacing: {original_spacing}, '
